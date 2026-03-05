@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ChevronRight, ChevronLeft, Loader2, Check } from "lucide-react";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import ExtrasSelector from "@/components/offers/ExtrasSelector";
 import type { ProductWithPrice } from "@/types";
@@ -107,10 +108,10 @@ export default function NewOfferPage() {
         setStep(3);
       } else {
         const err = await res.json();
-        alert(err.error || "Eroare la crearea ofertei.");
+        toast.error(err.error || "Eroare la crearea ofertei.");
       }
     } catch {
-      alert("Eroare la server. Încearcă din nou.");
+      toast.error("Eroare la server. Încearcă din nou.");
     }
     setSubmitting(false);
   });
@@ -131,7 +132,7 @@ export default function NewOfferPage() {
 
       router.push(`/offers/${createdOfferId}`);
     } catch {
-      alert("Eroare la salvarea extraopțiunilor.");
+      toast.error("Eroare la salvarea extraopțiunilor.");
     }
     setSubmitting(false);
   };

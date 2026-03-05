@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tamplarie_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tamplarie_bdm
+      POSTGRES_USER: bdm_user
+      POSTGRES_PASSWORD: bdm_secret_2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bdm_user -d tamplarie_bdm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tamplarie_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://bdm_user:bdm_secret_2024@db:5432/tamplarie_bdm
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-bdm-change-this-secret-in-production}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      GOOGLE_SERVICE_ACCOUNT_KEY: ${GOOGLE_SERVICE_ACCOUNT_KEY:-}
+      UPLOAD_DIR: /app/uploads
+      MAX_FILE_SIZE_MB: "20"
+      NEXT_PUBLIC_APP_NAME: "BDM Tâmplărie"
+      NEXT_PUBLIC_COMPANY_NAME: "BDM Sales Support"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:
