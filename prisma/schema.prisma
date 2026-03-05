@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum ProfileType {
+  PVC
+  ALUMINIU
+}
+
+enum FileType {
+  TABLOU
+  OFFER_PDF
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  GENERATE_PDF
+  SYNC_SHEET
+  SEND_OFFER
+}
+
+enum Currency {
+  RON
+  EUR
+}
+
+enum Unit {
+  mp
+  ml
+  buc
+  set
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(AGENT)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  offers     Offer[]
+  auditLogs  AuditLog[]
+  pricesSets ProductPrice[]
+
+  @@map("users")
+}
+
+model Product {
+  id                  String      @id @default(uuid())
+  name                String
+  brand               String
+  systemName          String      @map("system_name")
+  profileType         ProfileType @map("profile_type")
+  descriptionTemplate String      @map("description_template") @db.Text
+  isActive            Boolean     @default(true) @map("is_active")
+  sortOrder           Int         @default(0) @map("sort_order")
+  createdAt           DateTime    @default(now()) @map("created_at")
+
+  offers Offer[]
+  prices ProductPrice[]
+
+  @@map("products")
+}
+
+model ProductPrice {
+  id                 String   @id @default(uuid())
+  productId          String   @map("product_id")
+  pricePerMpRon      Decimal  @map("price_per_mp_ron") @db.Decimal(10, 2)
+  pricePerMlRon      Decimal  @map("price_per_ml_ron") @db.Decimal(10, 2)
+  montajPriceRon     Decimal  @map("montaj_price_ron") @db.Decimal(10, 2)
+  setByUserId        String   @map("set_by_user_id")
+  validFrom          DateTime @default(now()) @map("valid_from")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  setByUser User    @relation(fields: [setByUserId], references: [id])
+
+  @@map("product_prices")
+}
+
+model ExtraOption {
+  id          String  @id @default(uuid())
+  name        String
+  description String  @db.Text
+  category    String
+  unit        Unit    @default(mp)
+  sortOrder   Int     @default(0) @map("sort_order")
+  isActive    Boolean @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  mapping     ExtraOptionMapping?
+  offerExtras OfferExtra[]
+
+  @@map("extra_options")
+}
+
+model ExtraOptionMapping {
+  id            String   @id @default(uuid())
+  extraOptionId String   @unique @map("extra_option_id")
+  cellNotation  String   @map("cell_notation") // ex: "G9", "B15"
+  description   String?
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  extraOption ExtraOption @relation(fields: [extraOptionId], references: [id], onDelete: Cascade)
+
+  @@map("extra_option_mappings")
+}
+
+model Offer {
+  id            String      @id @default(uuid())
+  offerNumber   String      @unique @map("offer_number")
+  title         String
+  clientName    String      @map("client_name")
+  clientPhone   String?     @map("client_phone")
+  clientEmail   String?     @map("client_email")
+  clientAddress String?     @map("client_address") @db.Text
+  agentId       String      @map("agent_id")
+  productId     String      @map("product_id")
+  status        OfferStatus @default(DRAFT)
+
+  // Dimensions
+  mp Decimal @db.Decimal(10, 2)
+  ml Decimal @db.Decimal(10, 2)
+
+  // Price snapshot (saved when status changes to SENT)
+  priceSnapshotMaterialsRon Decimal? @map("price_snapshot_materials_ron") @db.Decimal(10, 2)
+  priceSnapshotMontajRon    Decimal? @map("price_snapshot_montaj_ron") @db.Decimal(10, 2)
+
+  discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  currency        Currency @default(RON)
+  eurRate         Decimal? @map("eur_rate") @db.Decimal(10, 4)
+
+  // Google Sheets
+  googleSheetUrl  String?  @map("google_sheet_url")
+  spreadsheetId   String?  @map("spreadsheet_id")
+  sheetSyncedAt   DateTime? @map("sheet_synced_at")
+
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  sentAt           DateTime? @map("sent_at")
+  pdfGeneratedAt   DateTime? @map("pdf_generated_at")
+
+  agent  User    @relation(fields: [agentId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  extras    OfferExtra[]
+  files     OfferFile[]
+
+  @@map("offers")
+}
+
+model OfferExtra {
+  id            String  @id @default(uuid())
+  offerId       String  @map("offer_id")
+  extraOptionId String  @map("extra_option_id")
+  quantity      Decimal @db.Decimal(10, 2)
+  unitPriceRon  Decimal @map("unit_price_ron") @db.Decimal(10, 2)
+  totalRon      Decimal @map("total_ron") @db.Decimal(10, 2)
+  notes         String?
+
+  offer       Offer       @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  extraOption ExtraOption @relation(fields: [extraOptionId], references: [id])
+
+  @@unique([offerId, extraOptionId])
+  @@map("offer_extras")
+}
+
+model OfferFile {
+  id           String   @id @default(uuid())
+  offerId      String   @map("offer_id")
+  fileType     FileType @map("file_type")
+  filename     String
+  originalName String   @map("original_name")
+  filePath     String   @map("file_path")
+  fileSize     Int      @map("file_size")
+  mimeType     String   @map("mime_type")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@map("offer_files")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?     @map("user_id")
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  oldData    Json?       @map("old_data")
+  newData    Json?       @map("new_data")
+  ipAddress  String?     @map("ip_address")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
